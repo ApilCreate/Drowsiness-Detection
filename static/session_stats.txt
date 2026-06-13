@@ -1,0 +1,4 @@
+Duration: 30s
+Total Frames: 245
+Open Count: 178
+Closed Count: 67

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drowsiness Detection</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold text-center mb-6">Drowsiness Detection System</h1>
+
+        <!-- Video Feed -->
+        <div class="flex justify-center mb-6">
+            <img id="video-feed" src="{{ url_for('video_feed') }}" class="rounded-lg shadow-lg" alt="Live Video Feed">
+        </div>
+
+        <!-- Controls -->
+        <div class="flex flex-col md:flex-row justify-center items-center space-y-4 md:space-y-0 md:space-x-4 mb-6">
+            <div>
+                <label for="duration" class="block text-sm font-medium text-gray-700">Session Duration:</label>
+                <select id="duration" class="mt-1 block w-full p-2 border rounded-md">
+                    <option value="30">30 seconds</option>
+                    <option value="60">1 minute</option>
+                    <option value="180">3 minutes</option>
+                </select>
+            </div>
+            <div>
+                <label for="camera" class="block text-sm font-medium text-gray-700">Camera Index:</label>
+                <select id="camera" class="mt-1 block w-full p-2 border rounded-md">
+                    <option value="0">Camera 0</option>
+                    <option value="1">Camera 1</option>
+                    <option value="2">Camera 2</option>
+                </select>
+            </div>
+            <button id="start-btn" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">Start Detection</button>
+            <button id="stop-btn" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600" disabled>Stop Detection</button>
+            <button id="screenshot-btn" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">Capture Screenshot</button>
+        </div>
+
+        <!-- Charts and Stats -->
+        <div id="results" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h2 class="text-xl font-semibold mb-2">Eye State Over Time</h2>
+                <img id="line-chart" src="" class="w-full rounded-lg shadow-md" alt="Line Chart">
+            </div>
+            <div>
+                <h2 class="text-xl font-semibold mb-2">Open vs Closed Eyes</h2>
+                <img id="bar-chart" src="" class="w-full rounded-lg shadow-md" alt="Bar Chart">
+                <div id="stats" class="mt-4 p-4 bg-white rounded-lg shadow-md"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            const startBtn = $('#start-btn');
+            const stopBtn = $('#stop-btn');
+            const screenshotBtn = $('#screenshot-btn');
+            const resultsDiv = $('#results');
+            const lineChart = $('#line-chart');
+            const barChart = $('#bar-chart');
+            const statsDiv = $('#stats');
+
+            let sessionCheckInterval = null;
+
+            function checkSessionStatus() {
+                $.get('/check_session_status', function(response) {
+                    if (!response.running && response.ended) {
+                        // Session has ended, stop checking and load charts
+                        clearInterval(sessionCheckInterval);
+                        setTimeout(function() {
+                            lineChart.attr('src', '/static/line_chart.png?' + new Date().getTime());
+                            barChart.attr('src', '/static/bar_chart.png?' + new Date().getTime());
+                            $.get('/static/session_stats.txt', function(data) {
+                                statsDiv.text(data);
+                            });
+                            resultsDiv.removeClass('hidden');
+                            startBtn.prop('disabled', false);
+                            stopBtn.prop('disabled', true);
+                        }, 1000); // 1-second delay to ensure charts are ready
+                    }
+                });
+            }
+
+            startBtn.click(function() {
+                const duration = $('#duration').val();
+                const camera = $('#camera').val();
+                $.post('/start_detection', { duration: duration, camera: camera }, function(response) {
+                    console.log(response.status);
+                    startBtn.prop('disabled', true);
+                    stopBtn.prop('disabled', false);
+                    resultsDiv.addClass('hidden');
+                    // Start polling for session status
+                    sessionCheckInterval = setInterval(checkSessionStatus, 1000); // Check every second
+                });
+            });
+
+            stopBtn.click(function() {
+                $.post('/stop_detection', function(response) {
+                    console.log(response.status);
+                    clearInterval(sessionCheckInterval); // Stop polling
+                    setTimeout(function() {
+                        lineChart.attr('src', '/static/line_chart.png?' + new Date().getTime());
+                        barChart.attr('src', '/static/bar_chart.png?' + new Date().getTime());
+                        $.get('/static/session_stats.txt', function(data) {
+                            statsDiv.text(data);
+                        });
+                        resultsDiv.removeClass('hidden');
+                        startBtn.prop('disabled', false);
+                        stopBtn.prop('disabled', true);
+                    }, 1000); // 1-second delay
+                });
+            });
+
+            screenshotBtn.click(function() {
+                $.post('/capture_screenshot', function(response) {
+                    console.log(response.status);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
