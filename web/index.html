@@ -37,10 +37,15 @@
       </div>
       <p id="status" class="status" role="status" aria-live="polite">Loading model and face landmark detector…</p>
     </section>
-    <section class="video-panel">
+    <section class="video-panel" aria-labelledby="live-heading">
+      <div class="video-heading">
+        <div><p class="eyebrow">LIVE MONITOR</p><h2 id="live-heading">Camera preview</h2></div>
+        <span id="live-indicator" class="indicator"><i></i> Idle</span>
+      </div>
       <div class="video-wrap">
         <video id="video" playsinline muted></video>
         <canvas id="overlay"></canvas>
+        <div id="video-placeholder" class="video-placeholder">Camera preview will appear when monitoring starts.</div>
       </div>
       <div class="readings">
         <div><span>CNN</span><strong id="cnn-state">—</strong></div>
@@ -49,9 +54,12 @@
       </div>
     </section>
     <section class="panel results" aria-labelledby="results-heading">
-      <h2 id="results-heading">Session report</h2>
+      <div class="results-heading"><div><p class="eyebrow">SESSION INSIGHTS</p><h2 id="results-heading">Session report</h2></div><span id="report-note" class="report-note">No completed session yet</span></div>
       <div id="stats" class="stats"></div>
-      <div class="charts"><canvas id="timeline-chart" aria-label="Eye state over time"></canvas><canvas id="ratio-chart" aria-label="Open versus closed percentage"></canvas></div>
+      <div class="charts">
+        <article class="chart-card"><h3>State over time</h3><p>Unknown periods are shown separately and are not counted as open.</p><canvas id="timeline-chart" aria-label="Eye state over time"></canvas></article>
+        <article class="chart-card"><h3>Known eye-state mix</h3><p>Only frames with a usable signal contribute to this percentage.</p><canvas id="ratio-chart" aria-label="Open versus closed percentage"></canvas></article>
+      </div>
     </section>
     <p class="privacy">Privacy: all processing happens in your browser. No video is uploaded.</p>
   </main>
