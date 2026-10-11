@@ -3,3 +3,7 @@ venv/
 .ipynb_checkpoints/
 __pycache__/
 *.pyc
+static/charts/*
+static/screenshots/*
+.DS_Store
+.env

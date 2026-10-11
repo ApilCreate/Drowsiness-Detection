@@ -71,9 +71,9 @@
                         // Session has ended, stop checking and load charts
                         clearInterval(sessionCheckInterval);
                         setTimeout(function() {
-                            lineChart.attr('src', '/static/line_chart.png?' + new Date().getTime());
-                            barChart.attr('src', '/static/bar_chart.png?' + new Date().getTime());
-                            $.get('/static/session_stats.txt', function(data) {
+                            lineChart.attr('src', '/static/charts/line_chart.png?' + new Date().getTime());
+                            barChart.attr('src', '/static/charts/bar_chart.png?' + new Date().getTime());
+                            $.get('/static/charts/session_stats.txt', function(data) {
                                 statsDiv.text(data);
                             });
                             resultsDiv.removeClass('hidden');
@@ -102,9 +102,9 @@
                     console.log(response.status);
                     clearInterval(sessionCheckInterval); // Stop polling
                     setTimeout(function() {
-                        lineChart.attr('src', '/static/line_chart.png?' + new Date().getTime());
-                        barChart.attr('src', '/static/bar_chart.png?' + new Date().getTime());
-                        $.get('/static/session_stats.txt', function(data) {
+                        lineChart.attr('src', '/static/charts/line_chart.png?' + new Date().getTime());
+                        barChart.attr('src', '/static/charts/bar_chart.png?' + new Date().getTime());
+                        $.get('/static/charts/session_stats.txt', function(data) {
                             statsDiv.text(data);
                         });
                         resultsDiv.removeClass('hidden');

@@ -4,16 +4,24 @@ import tensorflow as tf
 import threading
 import time
 from flask import Flask, Response, render_template, request, jsonify
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pygame import mixer
 import os
 from datetime import datetime
 import logging
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO),
+                    format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = Flask(__name__)
+STATIC_DIR = "static"
+CHARTS_DIR = os.path.join(STATIC_DIR, "charts")
+SCREENSHOTS_DIR = os.path.join(STATIC_DIR, "screenshots")
+os.makedirs(CHARTS_DIR, exist_ok=True)
+os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
 
 # Load the trained model
 try:
@@ -37,6 +45,8 @@ camera_index = 0
 session_duration = 0
 drowsy_detected = False
 session_ended = False  # New flag to track if session has ended
+CLOSED_EYE_THRESHOLD = float(os.getenv("DROWSINESS_THRESHOLD_SECONDS", "1.5"))
+eyes_closed_since = None
 
 # Initialize pygame mixer for alarm
 try:
@@ -58,7 +68,7 @@ def play_alarm():
 
 def generate_frames():
     """Generate frames for the live video feed."""
-    global cap, detection_running, drowsy_detected
+    global cap, detection_running, drowsy_detected, eyes_closed_since
     while True:
         try:
             if cap is None or not cap.isOpened():
@@ -74,12 +84,14 @@ def generate_frames():
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50))
 
-            eye_closed_count = 0
+            eye_count = 0
+            closed_eye_count = 0
             for (x, y, w, h) in faces:
                 face_roi = gray[y:y+h, x:x+w]
                 eyes = eye_cascade.detectMultiScale(face_roi, scaleFactor=1.1, minNeighbors=5, minSize=(20, 20))
 
                 for (ex, ey, ew, eh) in eyes:
+                    eye_count += 1
                     eye_roi = face_roi[ey:ey+eh, ex:ex+ew]
                     eye_roi = cv2.resize(eye_roi, (IMG_SIZE, IMG_SIZE))
                     eye_roi = eye_roi / 255.0
@@ -95,19 +107,27 @@ def generate_frames():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
                     if label == "Closed":
-                        eye_closed_count += 1
+                        closed_eye_count += 1
 
-                if detection_running and eye_closed_count >= 1:
+            # Haar's eye cascade commonly misses closed eyes. Keep that result
+            # unknown rather than incorrectly treating a missing eye as open.
+            frame_state = -1 if not faces or eye_count == 0 else int(closed_eye_count == eye_count)
+            now = time.time()
+            if detection_running and frame_state == 1:
+                if eyes_closed_since is None:
+                    eyes_closed_since = now
+                if now - eyes_closed_since >= CLOSED_EYE_THRESHOLD:
                     cv2.putText(frame, "DROWSINESS ALERT!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
                     if not drowsy_detected:
                         drowsy_detected = True
                         threading.Thread(target=play_alarm, daemon=True).start()
-                    session_data["timestamps"].append(time.time())
-                    session_data["states"].append(1)  # 1 for closed
-                elif detection_running:
-                    drowsy_detected = False
-                    session_data["timestamps"].append(time.time())
-                    session_data["states"].append(0)  # 0 for open
+            else:
+                eyes_closed_since = None
+                drowsy_detected = False
+
+            if detection_running:
+                session_data["timestamps"].append(now)
+                session_data["states"].append(frame_state)
 
             ret, buffer = cv2.imencode('.jpg', frame)
             frame = buffer.tobytes()
@@ -157,7 +177,7 @@ def generate_charts():
         plt.ylabel("State")
         plt.title("Eye State Over Time")
         plt.legend()
-        plt.savefig("static/line_chart.png")
+        plt.savefig(os.path.join(CHARTS_DIR, "line_chart.png"))
         plt.close()
         logging.info("Line chart generated")
 
@@ -167,12 +187,12 @@ def generate_charts():
         plt.bar(["Open", "Closed"], percentages, color=["green", "red"])
         plt.ylabel("Percentage (%)")
         plt.title("Open vs Closed Eyes")
-        plt.savefig("static/bar_chart.png")
+        plt.savefig(os.path.join(CHARTS_DIR, "bar_chart.png"))
         plt.close()
         logging.info("Bar chart generated")
 
         # Save session stats
-        with open("static/session_stats.txt", "w") as f:
+        with open(os.path.join(CHARTS_DIR, "session_stats.txt"), "w") as f:
             f.write(f"Duration: {session_duration}s\n")
             f.write(f"Total Frames: {total_frames}\n")
             f.write(f"Open Count: {open_count}\n")
@@ -192,13 +212,14 @@ def video_feed():
 
 @app.route('/start_detection', methods=['POST'])
 def start_detection():
-    global detection_running, session_duration, camera_index, cap, session_ended
+    global detection_running, session_duration, camera_index, cap, session_ended, eyes_closed_since
     try:
         duration = int(request.form['duration'])
         camera_index = int(request.form['camera'])
         session_duration = duration
         detection_running = True
         session_ended = False
+        eyes_closed_since = None
         if cap is not None:
             cap.release()
         cap = None  # Reset cap to force re-initialization
@@ -211,10 +232,11 @@ def start_detection():
 
 @app.route('/stop_detection', methods=['POST'])
 def stop_detection():
-    global detection_running, cap, session_ended
+    global detection_running, cap, session_ended, eyes_closed_since
     try:
         detection_running = False
         session_ended = True
+        eyes_closed_since = None
         if cap is not None:
             cap.release()
             cap = None
@@ -239,8 +261,9 @@ def capture_screenshot():
             ret, frame = cap.read()
             if ret:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                cv2.imwrite(f"static/screenshot_{timestamp}.jpg", frame)
-                logging.info(f"Screenshot captured: screenshot_{timestamp}.jpg")
+                path = os.path.join(SCREENSHOTS_DIR, f"screenshot_{timestamp}.jpg")
+                cv2.imwrite(path, frame)
+                logging.info(f"Screenshot captured: {path}")
                 return jsonify({"status": "Screenshot captured"})
         return jsonify({"status": "Failed to capture screenshot"})
     except Exception as e:
@@ -248,10 +271,9 @@ def capture_screenshot():
         return jsonify({"status": "Failed to capture screenshot", "error": str(e)}), 500
 
 if __name__ == "__main__":
-    if not os.path.exists("static"):
-        os.makedirs("static")
     try:
-        app.run(debug=True, threaded=True)
+        debug = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes"}
+        app.run(debug=debug, threaded=True)
     except Exception as e:
         logging.error(f"Error running Flask app: {e}")
     finally:
