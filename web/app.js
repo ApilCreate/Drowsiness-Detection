@@ -6,6 +6,9 @@ import {renderCharts, renderStats} from "./charts.js";
 const $ = id => document.querySelector(id);
 const video = $("#video"), canvas = $("#overlay"), ctx = canvas.getContext("2d");
 let model, detector, stream, session, running = false, muted = false, lastFrame = 0;
+let signalHistory = {cnn: [], ear: []}, lastStableState = null, uncertainSince = null, lastFaceAt = 0;
+const CONSENSUS_WINDOW = 5;
+const TRACKING_GRACE_MS = 350;
 const alarm = new Audio("alarm.wav");
 alarm.loop = true;
 alarm.preload = "auto";
@@ -30,6 +33,33 @@ function selectedState(cnnClosed, earClosed) {
   const mode=$("#signal-select").value;
   return mode==="cnn" ? cnnClosed : mode==="ear" ? earClosed : cnnClosed === earClosed ? cnnClosed : null;
 }
+function resetTracking() {
+  signalHistory = {cnn: [], ear: []};
+  lastStableState = null;
+  uncertainSince = null;
+  lastFaceAt = 0;
+}
+function consensus(history, value) {
+  history.push(value);
+  if (history.length > CONSENSUS_WINDOW) history.shift();
+  const closedVotes = history.filter(Boolean).length;
+  const openVotes = history.length - closedVotes;
+  if (closedVotes === openVotes) return null;
+  return closedVotes > openVotes;
+}
+function stabilizedState(rawState, now) {
+  if (rawState !== null) {
+    lastStableState = rawState;
+    uncertainSince = null;
+    return rawState;
+  }
+  uncertainSince ??= now;
+  if (lastStableState !== null && now - uncertainSince <= TRACKING_GRACE_MS) return lastStableState;
+  return null;
+}
+function signalLabel(value) {
+  return value === true ? "Closed" : value === false ? "Open" : "Stabilizing…";
+}
 function freezeFinalFrame() {
   if (!video.videoWidth || !video.videoHeight) return;
   canvas.width = video.videoWidth; canvas.height = video.videoHeight;
@@ -41,12 +71,27 @@ async function frame(now) {
   requestAnimationFrame(frame);
   if (now-lastFrame < 66 || video.readyState < 2) return; lastFrame=now;
   const result=detector.detectForVideo(video, now), landmarks=result.faceLandmarks?.[0];
-  if (!landmarks) { $("#cnn-state").textContent="No face"; $("#ear-state").textContent="No face"; record(session,"unknown",now); return; }
+  if (!landmarks) {
+    const tracking = lastFaceAt && now - lastFaceAt <= TRACKING_GRACE_MS;
+    $("#cnn-state").textContent=tracking ? "Tracking…" : "No face";
+    $("#ear-state").textContent=tracking ? "Tracking…" : "No face";
+    record(session, tracking ? "tracking" : "unknown", now);
+    if (!tracking) {
+      signalHistory = {cnn: [], ear: []};
+      lastStableState = null;
+      uncertainSince = null;
+    }
+    return;
+  }
+  lastFaceAt = now;
   const metrics=eyeMetrics(landmarks), predictions=predictEyes(model,video,landmarks);
-  const cnnClosed=predictions.every(p=>p.closed), earClosed=metrics.leftEar < 0.21 && metrics.rightEar < 0.21;
-  $("#cnn-state").textContent=`${cnnClosed?"Closed":"Open"} · L ${(predictions[0].confidence*100).toFixed(0)}% / R ${(predictions[1].confidence*100).toFixed(0)}%`;
-  $("#ear-state").textContent=`L ${metrics.leftEar.toFixed(3)} · R ${metrics.rightEar.toFixed(3)} (${earClosed?"closed":"open"})`;
-  draw(landmarks,predictions); record(session, selectedState(cnnClosed,earClosed)===true?"closed":selectedState(cnnClosed,earClosed)===false?"open":"unknown",now);
+  const cnnClosed=consensus(signalHistory.cnn, predictions.every(p=>p.closed));
+  const earClosed=consensus(signalHistory.ear, metrics.leftEar < 0.21 && metrics.rightEar < 0.21);
+  $("#cnn-state").textContent=`${signalLabel(cnnClosed)} · L ${(predictions[0].confidence*100).toFixed(0)}% / R ${(predictions[1].confidence*100).toFixed(0)}%`;
+  $("#ear-state").textContent=`L ${metrics.leftEar.toFixed(3)} · R ${metrics.rightEar.toFixed(3)} (${signalLabel(earClosed).toLowerCase()})`;
+  draw(landmarks,predictions);
+  const state = stabilizedState(selectedState(cnnClosed,earClosed), now);
+  record(session, state === true ? "closed" : state === false ? "open" : "unknown", now);
   const alert=session.closureStart && (now-session.closureStart)/1000 > session.threshold;
   $("#session-state").textContent=alert?"DROWSY ALERT":session.closureStart?`Eyes Closed ${((now-session.closureStart)/1000).toFixed(1)}s`:"Active";
   if (alert && !muted && alarm.paused) {
@@ -71,7 +116,7 @@ async function start() {
     status("Requesting camera permission…");
     await unlockAlarm();
     stream=await openCamera($("#camera-select").value); video.srcObject=stream; await video.play();
-    session=createSession(Number($("#threshold").value)); running=true; video.style.visibility="visible"; setLive(true); $("#start").disabled=true; $("#stop").disabled=false; $("#screenshot").disabled=false; status("Monitoring locally.");
+    session=createSession(Number($("#threshold").value)); resetTracking(); running=true; video.style.visibility="visible"; setLive(true); $("#start").disabled=true; $("#stop").disabled=false; $("#screenshot").disabled=false; status("Monitoring locally.");
     requestAnimationFrame(frame); setTimeout(stop, Number($("#duration-select").value)*1000);
   } catch (error) { status(`Unable to start monitoring: ${error.message}`); }
 }

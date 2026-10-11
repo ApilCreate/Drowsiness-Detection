@@ -4,7 +4,9 @@ export function createSession(threshold) {
 
 export function record(session, state, now) {
   session.frames++;
-  session.samples.push({time: (now - session.startedAt) / 1000, state});
+  const sampleState = state === "tracking" ? "unknown" : state;
+  session.samples.push({time: (now - session.startedAt) / 1000, state: sampleState});
+  if (state === "tracking") return;
   if (state === "closed") {
     session.closureStart ??= now;
     const duration = (now - session.closureStart) / 1000;
