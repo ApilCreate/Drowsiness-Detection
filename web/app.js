@@ -6,7 +6,9 @@ import {renderCharts, renderStats} from "./charts.js";
 const $ = id => document.querySelector(id);
 const video = $("#video"), canvas = $("#overlay"), ctx = canvas.getContext("2d");
 let model, detector, stream, session, running = false, muted = false, lastFrame = 0;
-const alarm = new Audio("alarm.wav"); alarm.loop = true;
+const alarm = new Audio("alarm.wav");
+alarm.loop = true;
+alarm.preload = "auto";
 
 function status(message) { $("#status").textContent = message; }
 function setLive(active) {
@@ -21,7 +23,7 @@ function draw(landmarks, predictions) {
   ids.forEach((eye, i) => { const xs=eye.map(id=>landmarks[id].x*canvas.width), ys=eye.map(id=>landmarks[id].y*canvas.height);
     const x=Math.min(...xs), y=Math.min(...ys), w=Math.max(...xs)-x, h=Math.max(...ys)-y;
     ctx.strokeStyle=predictions[i].closed?"#ff7181":"#71e0b5"; ctx.strokeRect(x-8,y-8,w+16,h+16); ctx.fillStyle=ctx.strokeStyle;
-    ctx.fillText(`${predictions[i].closed?"Closed":"Open"} ${(predictions[i].confidence*100).toFixed(0)}%`,x,y-12);
+    ctx.fillText(`${i === 0 ? "Left" : "Right"}: ${predictions[i].closed?"Closed":"Open"} ${(predictions[i].confidence*100).toFixed(0)}%`,x,y-12);
   });
 }
 function selectedState(cnnClosed, earClosed) {
@@ -41,19 +43,37 @@ async function frame(now) {
   const result=detector.detectForVideo(video, now), landmarks=result.faceLandmarks?.[0];
   if (!landmarks) { $("#cnn-state").textContent="No face"; $("#ear-state").textContent="No face"; record(session,"unknown",now); return; }
   const metrics=eyeMetrics(landmarks), predictions=predictEyes(model,video,landmarks);
-  const cnnClosed=predictions.every(p=>p.closed), earClosed=metrics.ear < 0.21;
-  $("#cnn-state").textContent=cnnClosed?"Closed":"Open"; $("#ear-state").textContent=`${metrics.ear.toFixed(3)} (${earClosed?"closed":"open"})`;
+  const cnnClosed=predictions.every(p=>p.closed), earClosed=metrics.leftEar < 0.21 && metrics.rightEar < 0.21;
+  $("#cnn-state").textContent=`${cnnClosed?"Closed":"Open"} · L ${(predictions[0].confidence*100).toFixed(0)}% / R ${(predictions[1].confidence*100).toFixed(0)}%`;
+  $("#ear-state").textContent=`L ${metrics.leftEar.toFixed(3)} · R ${metrics.rightEar.toFixed(3)} (${earClosed?"closed":"open"})`;
   draw(landmarks,predictions); record(session, selectedState(cnnClosed,earClosed)===true?"closed":selectedState(cnnClosed,earClosed)===false?"open":"unknown",now);
   const alert=session.closureStart && (now-session.closureStart)/1000 > session.threshold;
   $("#session-state").textContent=alert?"DROWSY ALERT":session.closureStart?`Eyes Closed ${((now-session.closureStart)/1000).toFixed(1)}s`:"Active";
-  if (alert && !muted) alarm.play().catch(()=>{}); if (!alert) { alarm.pause(); alarm.currentTime=0; }
+  if (alert && !muted && alarm.paused) {
+    alarm.play().catch(error => status(`Alarm blocked by browser: ${error.message}. Click Unmute alarm, then Start again.`));
+  }
+  if (!alert) { alarm.pause(); alarm.currentTime=0; }
+}
+async function unlockAlarm() {
+  alarm.muted = true;
+  try {
+    await alarm.play();
+    alarm.pause();
+    alarm.currentTime = 0;
+  } catch (error) {
+    throw new Error(`Alarm audio could not be unlocked: ${error.message}`);
+  } finally {
+    alarm.muted = false;
+  }
 }
 async function start() {
   try {
-    status("Requesting camera permission…"); stream=await openCamera($("#camera-select").value); video.srcObject=stream; await video.play();
+    status("Requesting camera permission…");
+    await unlockAlarm();
+    stream=await openCamera($("#camera-select").value); video.srcObject=stream; await video.play();
     session=createSession(Number($("#threshold").value)); running=true; video.style.visibility="visible"; setLive(true); $("#start").disabled=true; $("#stop").disabled=false; $("#screenshot").disabled=false; status("Monitoring locally.");
-    alarm.load(); requestAnimationFrame(frame); setTimeout(stop, Number($("#duration-select").value)*1000);
-  } catch (error) { status(`Camera/model error: ${error.message}`); }
+    requestAnimationFrame(frame); setTimeout(stop, Number($("#duration-select").value)*1000);
+  } catch (error) { status(`Unable to start monitoring: ${error.message}`); }
 }
 function stop() {
   if (!running) return; freezeFinalFrame(); running=false; alarm.pause(); alarm.currentTime=0; stream?.getTracks().forEach(track=>track.stop());
