@@ -44,13 +44,22 @@ Vercel cannot run the old server-side design reliably: cloud functions have no u
 
 ## Model performance
 
-The repository currently contains **no verified computed metrics**. TensorFlow is not available in the selected environment in this checkout, so `docs/confusion_matrix.png` and numeric metrics were not fabricated. Run:
+Evaluation uses a fixed, stratified 80/20 split (`random_state=42`) because the dataset has no separate test directory. The verified held-out results are:
+
+| Metric | Value |
+| --- | ---: |
+| Accuracy | 98.86% |
+| Precision | 98.79% |
+| Recall | 98.92% |
+| F1 | 98.85% |
+
+The corresponding confusion matrix is [`docs/confusion_matrix.png`](docs/confusion_matrix.png). Run:
 
 ```text
 python evaluate_model.py
 ```
 
-This evaluates a fixed, stratified 80/20 split (`random_state=42`) because the dataset has no separate test directory, and writes `docs/metrics.json`. TODO: run this command in an environment with the pinned dependencies and add the real accuracy, precision, recall, F1, and confusion-matrix image here.
+This writes the reproducible values to `docs/metrics.json` and regenerates the confusion matrix. Training curves are not included because the original executed notebook did not preserve a complete serialised history artifact.
 
 ## Limitations
 
@@ -89,7 +98,7 @@ Open `http://127.0.0.1:5000`. Set `DROWSINESS_THRESHOLD_SECONDS` to change the d
 
 ## Browser development and deployment
 
-The browser model files are not checked in until a real conversion succeeds. Install `tensorflowjs` in a compatible environment and run `python convert_model.py`; if local versions conflict, follow the exact Colab steps in [`convert_model_colab.ipynb`](convert_model_colab.ipynb). Then serve the static directory (camera APIs require a secure context):
+The converted browser model is checked in under `web/model/`. To reproduce the conversion, install `tensorflowjs` in a compatible environment and run `python convert_model.py`; on Windows with TensorFlow 2.19, use the isolated compatibility route documented in [`convert_model_colab.ipynb`](convert_model_colab.ipynb). Then serve the static directory (camera APIs require a secure context):
 
 ```text
 npx serve web

@@ -7,3 +7,4 @@ static/charts/*
 static/screenshots/*
 .DS_Store
 .env
+.convert-venv/

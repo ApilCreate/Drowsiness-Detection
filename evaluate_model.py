@@ -4,6 +4,9 @@ import argparse
 import json
 import numpy as np
 import cv2
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 
 def main() -> None:
@@ -13,7 +16,7 @@ def main() -> None:
     parser.add_argument("--output", default="docs/metrics.json")
     args = parser.parse_args()
     import tensorflow as tf
-    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
     from sklearn.model_selection import train_test_split
 
     root = Path(args.data)
@@ -43,6 +46,14 @@ def main() -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    figure, axis = plt.subplots(figsize=(5, 5))
+    ConfusionMatrixDisplay(np.asarray(metrics["confusion_matrix"]), display_labels=["Open", "Closed"]).plot(
+        ax=axis, cmap="Blues", colorbar=False
+    )
+    axis.set_title("Held-out eye-state confusion matrix")
+    figure.tight_layout()
+    figure.savefig(output.parent / "confusion_matrix.png", dpi=160)
+    plt.close(figure)
     print(json.dumps(metrics, indent=2))
 
 
