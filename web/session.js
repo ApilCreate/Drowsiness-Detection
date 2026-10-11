@@ -2,9 +2,9 @@ export function createSession(threshold) {
   return {startedAt: performance.now(), threshold, frames: 0, samples: [], alerts: 0, closureStart: null, longestClosure: 0, alerted: false};
 }
 
-export function record(session, state, now) {
+export function record(session, state, now, details = {}) {
   session.frames++;
-  session.samples.push({time: (now - session.startedAt) / 1000, state});
+  session.samples.push({time: (now - session.startedAt) / 1000, state, ...details});
   if (state === "closed") {
     session.closureStart ??= now;
     const duration = (now - session.closureStart) / 1000;

@@ -46,7 +46,10 @@ async function frame(now) {
   const cnnClosed=predictions.every(p=>p.closed), earClosed=metrics.leftEar < 0.21 && metrics.rightEar < 0.21;
   $("#cnn-state").textContent=`${cnnClosed?"Closed":"Open"} · L ${(predictions[0].confidence*100).toFixed(0)}% / R ${(predictions[1].confidence*100).toFixed(0)}%`;
   $("#ear-state").textContent=`L ${metrics.leftEar.toFixed(3)} · R ${metrics.rightEar.toFixed(3)} (${earClosed?"closed":"open"})`;
-  draw(landmarks,predictions); record(session, selectedState(cnnClosed,earClosed)===true?"closed":selectedState(cnnClosed,earClosed)===false?"open":"unknown",now);
+  draw(landmarks,predictions); record(session, selectedState(cnnClosed,earClosed)===true?"closed":selectedState(cnnClosed,earClosed)===false?"open":"unknown",now, {
+    leftEar: metrics.leftEar, rightEar: metrics.rightEar,
+    leftConfidence: predictions[0].confidence, rightConfidence: predictions[1].confidence
+  });
   const alert=session.closureStart && (now-session.closureStart)/1000 > session.threshold;
   $("#session-state").textContent=alert?"DROWSY ALERT":session.closureStart?`Eyes Closed ${((now-session.closureStart)/1000).toFixed(1)}s`:"Active";
   if (alert && !muted && alarm.paused) {

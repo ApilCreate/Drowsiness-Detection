@@ -10,13 +10,16 @@
 </head>
 <body>
   <main class="shell">
-    <header>
-      <p class="eyebrow">LOCAL-FIRST COMPUTER VISION</p>
-      <h1>Drowsiness Detection</h1>
-      <p class="lead">A browser-only eye-state monitor using your camera, CNN inference, and eye geometry.</p>
+    <header class="hero">
+      <div>
+        <p class="eyebrow"><span class="pulse-dot"></span> LOCAL-FIRST COMPUTER VISION</p>
+        <h1>Drowsiness<span>Detection</span></h1>
+        <p class="lead">A private, browser-based eye-state monitor powered by CNN inference and facial geometry.</p>
+      </div>
+      <div class="hero-badge"><strong>100%</strong><span>on-device<br>processing</span></div>
     </header>
     <section class="panel controls" aria-labelledby="controls-heading">
-      <h2 id="controls-heading">Session controls</h2>
+      <div class="section-title"><div><p class="eyebrow">CONFIGURE</p><h2 id="controls-heading">Session controls</h2></div><span class="secure-label">● Private session</span></div>
       <div class="control-grid">
         <label>Camera<select id="camera-select" aria-label="Camera"></select></label>
         <label>Session length<select id="duration-select" aria-label="Session length">
@@ -48,17 +51,19 @@
         <div id="video-placeholder" class="video-placeholder">Camera preview will appear when monitoring starts.</div>
       </div>
       <div class="readings">
-        <div><span>CNN</span><strong id="cnn-state">—</strong></div>
-        <div><span>EAR</span><strong id="ear-state">—</strong></div>
-        <div><span>Session</span><strong id="session-state">Idle</strong></div>
+        <div><span>CNN CLASSIFICATION <small>per-eye confidence</small></span><strong id="cnn-state">—</strong></div>
+        <div><span>EYE ASPECT RATIO <small>both eyes required</small></span><strong id="ear-state">—</strong></div>
+        <div class="session-reading"><span>SESSION STATUS <small>continuous closure timer</small></span><strong id="session-state">Idle</strong></div>
       </div>
     </section>
     <section class="panel results" aria-labelledby="results-heading">
       <div class="results-heading"><div><p class="eyebrow">SESSION INSIGHTS</p><h2 id="results-heading">Session report</h2></div><span id="report-note" class="report-note">No completed session yet</span></div>
       <div id="stats" class="stats"></div>
       <div class="charts">
-        <article class="chart-card"><h3>State over time</h3><p>Unknown periods are shown separately and are not counted as open.</p><canvas id="timeline-chart" aria-label="Eye state over time"></canvas></article>
-        <article class="chart-card"><h3>Known eye-state mix</h3><p>Only frames with a usable signal contribute to this percentage.</p><canvas id="ratio-chart" aria-label="Open versus closed percentage"></canvas></article>
+        <article class="chart-card chart-wide"><div class="chart-heading"><div><h3>State over time</h3><p>Live classification across the session.</p></div><span class="chart-key">● open &nbsp; ● closed</span></div><canvas id="timeline-chart" aria-label="Eye state over time"></canvas></article>
+        <article class="chart-card"><div class="chart-heading"><div><h3>EAR signal</h3><p>Lower values indicate narrower eyes.</p></div></div><canvas id="ear-chart" aria-label="Eye aspect ratio over time"></canvas></article>
+        <article class="chart-card"><div class="chart-heading"><div><h3>Eye-state mix</h3><p>Known frames only.</p></div></div><canvas id="ratio-chart" aria-label="Open versus closed percentage"></canvas></article>
+        <article class="chart-card chart-wide"><div class="chart-heading"><div><h3>Model confidence</h3><p>Confidence by eye helps identify uneven camera conditions.</p></div></div><canvas id="confidence-chart" aria-label="Left and right eye model confidence"></canvas></article>
       </div>
     </section>
     <p class="privacy">Privacy: all processing happens in your browser. No video is uploaded.</p>
